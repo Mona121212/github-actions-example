@@ -18,6 +18,14 @@ jobs:
         pip install git+https://github.com/morph-labs/morph-python-sdk.git
     - name: Start instance and get ID
       run: |
+        echo "SNAPSHOT_ID=$(morphcloud snapshot list -m github-repo=$GITHUB_REPOSITORY -m name=morph-github-runner --json) | jq -r '.[0].id'" >> $GITHUB_ENV
+
+        # If no snapshot is found, create a new one
+        if [ -z "$SNAPSHOT_ID" ]; then
+          echo "SNAPSHOT_ID=$(morphcloud snapshot create --vcpus 1 --memory 1024 --disk-size 2048)" >> $GITHUB_ENV
+          morphcloud snapshot set-metadata $SNAPSHOT_ID -m github-repo=$GITHUB_REPOSITORY -m name=morph-github-runner
+        fi
+
         echo "INSTANCE_ID=$(morphcloud instance start snapshot_do2mk83p)" >> $GITHUB_ENV
     - name: Copy files to MorphVM
       run: |
