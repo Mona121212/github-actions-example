@@ -1,0 +1,55 @@
+name: Build and Test
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+env:
+  MORPH_API_KEY: ${{ secrets.MORPH_API_KEY }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install morphcloud
+      run: |
+        pip install git+https://github.com/morph-labs/morph-python-sdk.git
+    - name: Start instance and get ID
+      run: |
+        echo "INSTANCE_ID=$(morphcloud instance start snapshot_do2mk83p)" >> $GITHUB_ENV
+    - name: Copy files to MorphVM
+      run: |
+        morphcloud instance copy -r . $INSTANCE_ID:.
+    - name: Install dependencies on MorphVM
+      run: |
+        morphcloud instance ssh $INSTANCE_ID -- apt update
+        morphcloud instance ssh $INSTANCE_ID -- apt install -y gcc gdb make tmux python3
+    - name: Build program on MorphVM
+      run: |
+        morphcloud instance ssh $INSTANCE_ID -- make
+    - name: Generate test input
+      run: |
+        morphcloud instance ssh $INSTANCE_ID -- 'python3 test_input.py > test_data.txt'
+    - name: Run test in tmux/gdb
+      id: gdb-run
+      continue-on-error: true
+      run: |
+        morphcloud instance ssh $INSTANCE_ID -- tmux new-session -d 'gdb -ex "handle SIGABRT stop" -ex "run test_data.txt" -ex "bt" ./text_analyzer'
+        sleep 5
+        if morphcloud instance ssh $INSTANCE_ID -- tmux list-sessions; then
+          SNAPSHOT_ID=$(morphcloud instance snapshot $INSTANCE_ID)
+          echo "SNAPSHOT_ID=${SNAPSHOT_ID}" >> $GITHUB_ENV
+          exit 1
+        fi
+    - name: Stopping MorphVM
+      if: always()
+      run: |
+        morphcloud instance stop $INSTANCE_ID
+    - name: Report failure
+      if: steps.gdb-run.outcome == 'failure'
+      run: |
+        echo "GDB encountered an error. To debug, run:"
+        echo "morphcloud instance ssh --rm \$(morphcloud instance start ${{ env.SNAPSHOT_ID }}) -- tmux attach"
+        exit 1
