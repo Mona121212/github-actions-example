@@ -23,7 +23,7 @@ jobs:
         # If no snapshot is found, create a new one
         if [ -z "$SNAPSHOT_ID" ]; then
           echo "SNAPSHOT_ID=$(morphcloud snapshot create --vcpus 1 --memory 1024 --disk-size 2048)" >> $GITHUB_ENV
-          morphcloud snapshot set-metadata $SNAPSHOT_ID -m github-repo=$GITHUB_REPOSITORY -m name=morph-github-runner
+          morphcloud snapshot set-metadata $SNAPSHOT_ID github-repo=$GITHUB_REPOSITORY name=morph-github-runner
         fi
 
         echo "INSTANCE_ID=$(morphcloud instance start snapshot_do2mk83p)" >> $GITHUB_ENV
